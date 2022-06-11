@@ -276,8 +276,73 @@ function colCheck(r1, r2) {
 }
 ```
 But why does this actually work? Remember that x2 is always the right side of a rectangle, and x1 is always the left.<br>
-The first check asks, is part of the first rectangle on the right side of the left side of the second rectangle?
-![Image failed to load](
+The first check asks, is part of the first rectangle on the right side of the left side of the second rectangle?<br>
+![Image failed to load](assets/collision1.png) <br>
+Then, the second check narrows down rectangle 1 to intersecting the x position of rectangle 2.<br>
+![Image failed to load](assets/collision2.png)<br>
+The y position checks does the same in the y direction.<br>
+![Image failed to load](assets/collision3.png)<br>
+This allows for a check as to whether the rectangles intersect or not.<br>
+![Image failed to load](assets/collision4.png)<br><br>
+So we can now determine if the player is touching a platform, but this isn't completely done yet. How would you figure out the side the player collided with, and move it to the correct spot? Instead of trying to see if each side intersects with the player, we can just move in the x direction and y direction seperately, then check for collisions after each. This won't be any less efficient, since the collision check is just 4 comparisons.<br><br>
+**server.js**
+```javascript
+function move() {
+  for (const id in inp) {
+    ...
+    pos[id].x += vel[id].x; // Move in x direction
+    let cpos = { // Convert player coordinates into corner coordinates
+      x1: pos[id].x - r,
+      y1: pos[id].y - r,
+      x2: pos[id].x + r,
+      y2: pos[id].y + r,
+    };
+    for (const p in plat) {
+      if (colCheck(cpos, plat[p])) { // Check for collision with every platform
+        pos[id].x -= vel[id].x; // If there is collision, move back and stop x motion
+        vel[id].x = 0;
+        break;
+      }
+    }
+    if (pos[id].x < r) {
+      pos[id].x = r;
+      vel[id].x = 0;
+    } else if (pos[id].x > width - r) {
+      pos[id].x = width - r;
+      vel[id].x = 0;
+    }
+
+    pos[id].y += vel[id].y; // Move in y direction
+    cpos = { // Convert coordinates to corner coordinates
+      x1: pos[id].x - r,
+      y1: pos[id].y - r,
+      x2: pos[id].x + r,
+      y2: pos[id].y + r,
+    };
+    for (const p in plat) {
+      if (colCheck(cpos, plat[p])) { // Check for collision
+        pos[id].y -= vel[id].y; // Move back if there is collision
+        if (vel[id].y < 0) ground[id] = true; // If falling, the player has touched the ground and can jump again.
+        vel[id].y = 0;
+        break;
+      }
+    }
+    if (pos[id].y < r) {
+      pos[id].y = r;
+      ground[id] = true;
+      vel[id].y = 0;
+    } else if (pos[id].y > height - r) {
+      pos[id].y = height - r;
+      vel[id].y = 0;
+    }
+    if (vel[id].y != 0) ground[id] = false;
+  }
+}
+```
+Finally, we have a working multiplayer platformer. Let's add a bit more functionality.
 ### Cutting platforms
+Currently, the screen will only fill up more and more with platforms until it becomes impossible to move. Let's add some way to add a "negative" platform that sets a rectangular area to free space. <br>
+In theory, cutting platforms seems simple: just split up the platform into smaller platforms that don't include the cut out part. However, the way this is done is important. Every platform has to remain a rectangle for the collision algorithm to work, and there are many ways that a platform can be cut. It would be best to find a way to do this in a way that works for every case.<br>
+
 ## In game chat
 ### XSS attacks
