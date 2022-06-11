@@ -343,6 +343,63 @@ Finally, we have a working multiplayer platformer. Let's add a bit more function
 ### Cutting platforms
 Currently, the screen will only fill up more and more with platforms until it becomes impossible to move. Let's add some way to add a "negative" platform that sets a rectangular area to free space. <br>
 In theory, cutting platforms seems simple: just split up the platform into smaller platforms that don't include the cut out part. However, the way this is done is important. Every platform has to remain a rectangle for the collision algorithm to work, and there are many ways that a platform can be cut. It would be best to find a way to do this in a way that works for every case.<br>
-
+**The solution**<br>
+![Image failed to load](assets/cut1.png)<br>
+Have 4 x positions, labeled x0-x3. x0 is the left border of the original rectangle, x3 is the right border, x1 is either the left border of the cut or the left border of the original, whichever is larger (this constrains it to being inside the original). x2 is either the right border of the cut or the right border of the original, whichever is smaller. The x position that has to be removed from the original is between x1 and x2. <br><br>
+Doing the same for the y positions, the original is now split up into 9 rectangles, some of which can have 0 area. By removing the original platform and adding the non-center, non-0 area platforms, the cut can be successfully made.<br><br>
+**script.js**
+```javascript
+function mouseClicked() {
+  ...
+  if (c1) {
+    ...
+  } else {
+    ...
+    if (x1 != x2 && y1 != y2)
+      socket.emit(keyIsDown(SHIFT) ? "negplatform" : "platform", { // Send a "negative" platform if the shift key is held down
+        x1: x1,
+        y1: y1,
+        x2: x2,
+        y2: y2,
+      });
+  }
+  c1 = !c1;
+}
+```
+**server.js**
+```javascript
+io.on("connection", (socket) => {
+  ...
+  socket.on("negplatform", (cut) => { // Recieve cut action
+    cutplatform(cut);
+  });
+ }
+function cutplatform(cut) {
+  let x = [0, 0, 0, 0],
+    y = [0, 0, 0, 0];
+  let nplat = []; // Changed platforms array
+  for (let i = 0; i < plat.length; i++) {
+    if (colCheck(cut, plat[i])) { // Check if the cut will change the platform
+      const p = plat[i];
+      x[0] = p.x1; // Set x0-x3 and y0-y3 values
+      x[1] = Math.max(cut.x1, p.x1);
+      x[2] = Math.min(cut.x2, p.x2);
+      x[3] = p.x2;
+      y[0] = p.y1;
+      y[1] = Math.max(cut.y1, p.y1);
+      y[2] = Math.min(cut.y2, p.y2);
+      y[3] = p.y2;
+      for (let x1 = 0; x1 < 3; x1++) {
+        for (let y1 = 0; y1 < 3; y1++) {
+          if (x1 == 1 && y1 == 1) continue; // Get every rectangle that is not the center
+          if (x[x1] == x[x1 + 1] || y[y1] == y[y1 + 1]) continue; // Get every rectangle that does not have 0 area
+          nplat.push({ x1: x[x1], y1: y[y1], x2: x[x1 + 1], y2: y[y1 + 1] }); // Insert this rectangle into the new platform array
+        }
+      }
+    } else nplat.push(plat[i]); // If no effect, move it directly to the new array
+  }
+  plat = nplat;
+}
+```
 ## In game chat
 ### XSS attacks
