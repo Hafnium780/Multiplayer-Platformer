@@ -125,9 +125,159 @@ function draw() {
   }
 }
 ```
+The server will be in charge of processing the inputs.<br><br>
+**server.js**
+```javascript
+
+let sx = 1, sy = 10; // Speed of moving in x/y directions
+let g = 1; // Gravity
+let r = 10; // Size of squares
+let pos = {}; // Position of every player
+let vel = {}; // Velocity of every player
+let ground = {}; // Whether or not the player is on the ground
+let inp = {}; // Every player's inputs
+
+io.on("connection", (socket) => {
+  ...
+  socket.on("update", (data) => { // Recieve the update from clients
+    inp[socket.id] = data; // Every player gets a unique id, to distinguish between two players who might choose the same name.
+  });
+}
+
+const framerate = 30; // Same framerate to sync
+setInterval(() => { // Run this once every 1000/framerate milliseconds
+  move();
+
+  io.emit("positions", pos); // Send the positions back
+}, 1000 / framerate);
+function move() {
+  for (const id in inp) { // Go through every player's inputs
+    const input = inp[id];
+    if (input.l) { // Move left
+      vel[id].x -= sx;
+    }
+    if (input.r) { // Move right
+      vel[id].x += sx;
+    }
+    if (input.u) { 
+      if (ground[id]) { // Jump if on the ground
+        vel[id].y = sy;
+        ground[id] = false;
+      } else vel[id].y += sy * 0.05; // Add a little bit of velocity if up is held, for a higher jump
+    }
+    if (input.d) { // Fall down faster
+      vel[id].y -= sy * 0.05;
+    }
+    vel[id].y -= g; // Gravity
+    vel[id].x *= 0.9; // Damping to make movement more controllable
+
+    pos[id].x += vel[id].x; // Move in the x direction
+    if (pos[id].x < r) { // Check for hitting the boundaries
+      pos[id].x = r;
+      vel[id].x = 0;
+    } else if (pos[id].x > width - r) {
+      pos[id].x = width - r;
+      vel[id].x = 0;
+    }
+    pos[id].y += vel[id].y; // Move in the y direction
+    if (pos[id].y < r) { // Check for hitting boundaries
+      pos[id].y = r;
+      ground[id] = true;
+      vel[id].y = 0;
+    } else if (pos[id].y > height - r) {
+      pos[id].y = height - r;
+      vel[id].y = 0;
+    }
+    if (vel[id].y != 0) ground[id] = false; // If moving in the y direction, the player is no longer on the ground.
+  }
+}
+```
+This all allows the players to move around, and see the other players. There isn't much to do except move around, so let's add some platforms.
 ## Platforms
+There are many ways to describe platforms, but I decided to do it with two corners.
+```javascript
+let platform = {x1:x1, y1:y1, x2:x2, y2:y2};
+```
+One thing to be aware of is that whenever a new platform is created, the coordinates must be changed so that x1 < x2 and y1 < y2. This will become important later.
 ### Adding platforms
+The simplest way to create a set of platforms is to make the player do it :). <br><br>
+**script.js**
+```javascript
+function mouseClicked() {
+  if (mouseX < 0 || mouseX > width || mouseY < 0 || mouseY > height) return;
+  if (c1) { // Are we on corner 1?
+    x1 = mouseX;
+    y1 = height - mouseY;
+  } else { // We are on corner 2
+    x2 = mouseX;
+    y2 = height - mouseY;
+    if (x1 > x2) { // Swap x and y coordinates if they are in the wrong order.
+      let t = x2;
+      x2 = x1;
+      x1 = t;
+    }
+    if (y1 > y2) {
+      let t = y2;
+      y2 = y1;
+      y1 = t;
+    }
+    if (x1 != x2 && y1 != y2)
+      socket.emit("platform", { // Verify the platform does not have 0 thickness, then send it over to the server.
+        x1: x1,
+        y1: y1,
+        x2: x2,
+        y2: y2,
+      });
+  }
+  c1 = !c1; // Switch the state of which corner is active.
+}
+
+function draw() {
+  ...
+  strokeWeight(5);
+  noFill();
+  if (!c1) { // Show a rectangle where the platform will be placed
+    stroke(0, 255, 0);
+    rect(x1, y1, mouseX - x1, height - mouseY - y1);
+  }
+  noStroke();
+  fill(200);
+  for (const id in plat) {
+    rect(plat[id].x1, plat[id].y1, plat[id].x2 - plat[id].x1, plat[id].y2 - plat[id].y1);
+  }
+  ...
+}
+```
+**server.js**
+```javascript
+let plat = [];
+io.on("connection", (socket) => {
+  ...
+  socket.on("platform", (platform) => {
+    plat.push(platform); // Recieve new platforms
+  });
+}
+const framerate = 30;
+setInterval(() => {
+  move();
+
+  io.emit("positions", pos);
+  io.emit("plat", plat); // Send platforms to all clients
+}, 1000 / framerate);
+...
+```
+Now, platforms can be made and seen by all the clients. They still don't do anything, though.
 ### Collision detection
+Because the players and platforms are axis aligned rectangles, detecting whether or not they collide is pretty simple.<br><br>
+**server.js**
+```javascript
+function colCheck(r1, r2) {
+  return r1.x2 > r2.x1 && r1.x1 < r2.x2 && r1.y2 > r2.y1 && r1.y1 < r2.y2;
+}
+```
+But why does this actually work? Remember that x2 is always the right side of a rectangle, and x1 is always the left.<br>
+The first check asks, is part of the first rectangle on the right side of the left side of the second rectangle?
+![Image failed to load](
 ### Cutting platforms
 ## In game chat
 ### XSS attacks
