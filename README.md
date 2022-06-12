@@ -4,7 +4,7 @@ This is a document showing my journey in creating an online multiplayer game, us
 **So, why even do this?**<br>
 ...<br>
 Why not?<br><br>
-One day, I wanted to try creating some sort of multiplayer game. It would be a cool little project that would be fun to do. I used glitch.com to 
+One day, I wanted to try creating some sort of multiplayer game. It would be a cool little project that would be fun to do. I use glitch.com to host the game.
 ## Using Node.js and Socket.io to create a basic multiplayer interface
 First of all, we have to make sure the connection between client and server works. On the server side, a simple socket connection is created.<br><br>
 **server.js**
