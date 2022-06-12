@@ -18,7 +18,7 @@ const io = require("socket.io")(http, { // Create an input/output connection thr
 
 const port = process.env.PORT || 3000; // Set the port to be used, if none specified use 3000
 
-app.get("/", (req, res) => { // Whenever a request is recieved, send the main index.html file.
+app.get("/", (req, res) => { // Whenever a request is received, send the main index.html file.
   res.sendFile("/public/index.html");
 });
 
@@ -49,7 +49,6 @@ function draw() {
 ```
 **index.html**
 ```html
-<!-- Hafnium780 -->
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -139,7 +138,7 @@ let inp = {}; // Every player's inputs
 
 io.on("connection", (socket) => {
   ...
-  socket.on("update", (data) => { // Recieve the update from clients
+  socket.on("update", (data) => { // Receive the update from clients
     inp[socket.id] = data; // Every player gets a unique id, to distinguish between two players who might choose the same name.
   });
 }
@@ -254,7 +253,7 @@ let plat = [];
 io.on("connection", (socket) => {
   ...
   socket.on("platform", (platform) => {
-    plat.push(platform); // Recieve new platforms
+    plat.push(platform); // Receive new platforms
   });
 }
 const framerate = 30;
@@ -370,7 +369,7 @@ function mouseClicked() {
 ```javascript
 io.on("connection", (socket) => {
   ...
-  socket.on("negplatform", (cut) => { // Recieve cut action
+  socket.on("negplatform", (cut) => { // Receive cut action
     cutplatform(cut);
   });
  }
@@ -401,5 +400,205 @@ function cutplatform(cut) {
   plat = nplat;
 }
 ```
+#### Small optimization
+One small problem that can arise from this method of cutting is a large number of platforms being created, some of which can be merged together. By checking if the x or y edges of every platform lines up, we can merge together some platforms.<br><br>
+**server.js**
+```javascript
+function cutplatform(cut) {
+  ...
+  nplat = [];
+  let used = []; // Whether or not this platform has already been combined
+  for (let i = 0; i < plat.length; i++) used[i] = false;
+  for (let i = 0; i < plat.length; i++) {
+    for (let j = 0; j < plat.length; j++) { // Try every platform combination
+      if (i == j) continue; // Except platforms with themselves
+      if (used[j] || used[i]) continue; // And those that have already been used
+      if (
+        plat[i].x1 == plat[j].x1 &&
+        plat[i].x2 == plat[j].x2 &&
+        plat[i].y2 == plat[j].y1
+      ) { // Do the platforms line up in the y direction?
+        nplat.push({
+          x1: plat[i].x1,
+          y1: Math.min(plat[i].y1, plat[j].y1),
+          x2: plat[i].x2,
+          y2: Math.max(plat[i].y2, plat[j].y2),
+        }); // Create a new platform that covers both original, then mark them as used.
+        used[i] = true;
+        used[j] = true;
+      } else if (
+        plat[i].y1 == plat[j].y1 &&
+        plat[i].y2 == plat[j].y2 &&
+        plat[i].x2 == plat[j].x1
+      ) { // Do they line up in the x direction?
+        nplat.push({
+          x1: Math.min(plat[i].x1, plat[j].x1),
+          y1: plat[i].y1,
+          x2: Math.max(plat[i].x2, plat[j].x2),
+          y2: plat[i].y2,
+        }); // Create a new platform that covers both original, then mark them as used.
+        used[i] = true;
+        used[j] = true;
+      }
+    }
+  }
+  for (let i = 0; i < plat.length; i++) {
+    if (!used[i]) nplat.push(plat[i]); // Push all uncombined platforms into new array
+  }
+  plat = nplat;
+}
+```
+## Username
+Right now, every player is the same. Let's change this.<br>
+We want the player to have to pick a username before they are allowed in. Thus, we add<br>
+```javascript
+if (username == "") return;
+```
+to the top of any function which may be called before a name is chosen (mouseClicked, draw). Then, we add the screen which asks for the username, and the ability to get others' usernames.<br><br>
+**script.js**
+```javascript
+function setup() {
+  const cnv = createCanvas(800, 500);
+  input = createInput(); // Create and position text input
+  input.position(20, 65);
+
+  sub = createButton("submit"); // Create and position a submit button
+  sub.position(input.x + input.width, 65);
+  sub.mousePressed(subUsername); // When the button is pressed, call subUsername()
+
+  usertext = createElement("h2", "Username"); // Create a prompt
+  usertext.position(20, 5);
+  ...
+  socket.on("names", (data) => {
+    names = data;
+  });
+}
+
+function subUsername() {
+  username = input.value(); // Store username
+  if (username == "") return; // If it is blank, do nothing
+  socket.emit("username", username); // Send name to server
+  input.remove(); // Delete input elements
+  usertext.remove();
+  sub.remove();
+}
+```
+We also want to display everyone's names in game.<br><br>
+**script.js**
+```javascript
+function draw() {
+  ...
+  fill(100, 255, 100);
+  textSize(10);
+  push(); // Store this drawing state, so we can revert to it.
+  scale(1, -1); // Flip screen back, otherwise text will be upside-down
+  translate(0, -height);
+  for (const id in positions) { // For every player, display their name at the bottom of their character.
+    const position = positions[id];
+    text(names[id], position.x, height - position.y + r);
+  }
+  pop(); // Revert to original state.
+}
+```
+Server side, we receive the names and send them back.<br><br>
+**server.js**
+```javascript
+io.on("connection", (socket) => {
+  ...
+  socket.on("username", (user) => {
+    names[socket.id] = user;
+    console.log(`User ${user} entered`);
+  });
+});
+
+setInterval(() => {
+  ...
+  io.emit("names", names);
+}, 1000 / framerate);
+```
 ## In game chat
+It's a game. Might as well have a way to communicate inside of it.<br>
+The way this will be done is through a text box on the side of the game.<br><br>
+**script.js**
+```javascript
+function setup() {
+  ...
+  socket.on("msgupdate", (data) => {
+    msgs = data; // Get messages in the form of (name, message)
+    let total = "";
+    for (const m in msgs) {
+      total += msgs[m].name + ": " + msgs[m].m; // Add the name and message to the overall html, then add a line break
+      total += "<br>";
+    }
+    msgBox.html("<span>" + total + "</span>"); // Update the message box
+  });
+}
+function subUsername() {
+  ...
+  msg = createInput(); // Create and position message input 
+  msg.position(50, windowHeight / 2 + height / 2 + 20);
+
+  sendmsg = createButton("send"); // Create a send button
+  sendmsg.position(msg.x + msg.width, msg.y);
+  sendmsg.mousePressed(msgSend); // Call msgSend when it is clicked
+
+  msgBox = createDiv("").size(200, 400); // Create a box where messages show up
+  msgBox.addClass("wrap"); // Make sure the box will wrap text
+  msgBox.position(40, 100);
+  msgBox.style("overflow", "hidden"); // Hide any overflow
+  msgBox.style("overflow-wrap", "anywhere"); // Wrap text anywhere into new lines
+  
+  socket.emit("msgupdate"); // Request all messages
+}
+
+function msgSend() { // Send a message
+  if (msg.value() == "") return; // No empty messages
+  socket.emit("msg", msg.value());
+  msg.value(""); // Clear input box
+}
+
+function draw() {
+  ...
+  if (keyIsDown(ENTER)) msgSend(); // For QOL, send message when enter is pressed
+}
+```
+The server will receive messages and store the most recent ones.<br><br>
+**server.js**
+```javascript
+
+let msgs = [];
+let msgkeep = 25;
+io.on("connection", (socket) => {
+  ...
+  socket.on("msg", (msg) => {
+    if (msgs.length == msgkeep) msgs.shift(); // If there will be more messages than wanted, remove the first (least recent) one.
+    msgs.push({ name: names[socket.id], m: msg }); // Add in the new message and who sent it.
+    io.emit("msgupdate", msgs); // Send message to all.
+    console.log(names[socket.id] + ": " + msg);
+  });
+  socket.on("msgupdate", () => {
+    io.emit("msgupdate", msgs);
+  });
+});
+```
+This works, but the way the username and message text are being handled leaves us vulnerable to a common type of exploit.
 ### XSS attacks
+XSS, or cross site scripting, is an attack in which you can inject HTML code into the website code. Let's see what happens if someone inputs `<b>` into the message box, and then someone else sends a message.<br><br>
+First, the message is sent without problem to the server. The server stores the message in the msgs array, and sends the updated array to every client. <br>
+When the client receives the message, the total HTML will look something like this:
+```html
+<span>
+  test: <b><br>
+  test1: hi<br>
+</span>
+```
+The message box looks like this:
+<pre>
+test: 
+<b>test1: hi</b>
+</pre>
+The tag is processed as actual code, instead of a message. This leaves the rest of the messages bolded, until the tagged message disappeaers. Bolded text isn't harmful, but this means that scripts can be sent and run through the message box, allowing someone to run malicious programs through it.<br><br>
+The solution to this is somewhat simple, just replace any special characters that can break out of the string with ones that will be displayed as the original, but processed like a string.
+```javascript
+msg = msg.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+```
