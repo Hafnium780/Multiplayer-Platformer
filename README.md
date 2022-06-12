@@ -341,8 +341,7 @@ function move() {
 Finally, we have a working multiplayer platformer. Let's add a bit more functionality.
 ### Cutting platforms
 Currently, the screen will only fill up more and more with platforms until it becomes impossible to move. Let's add some way to add a "negative" platform that sets a rectangular area to free space. <br>
-In theory, cutting platforms seems simple: just split up the platform into smaller platforms that don't include the cut out part. However, the way this is done is important. Every platform has to remain a rectangle for the collision algorithm to work, and there are many ways that a platform can be cut. It would be best to find a way to do this in a way that works for every case.<br>
-**The solution**<br>
+In theory, cutting platforms seems simple: just split up the platform into smaller platforms that don't include the cut out part. However, the way this is done is important. Every platform has to remain a rectangle for the collision algorithm to work, and there are many ways that a platform can be cut. It would be best to find a way to do this in a way that works for every case.<br><br>
 ![Image failed to load](assets/cut1.png)<br>
 Have 4 x positions, labeled x0-x3. x0 is the left border of the original rectangle, x3 is the right border, x1 is either the left border of the cut or the left border of the original, whichever is larger (this constrains it to being inside the original). x2 is either the right border of the cut or the right border of the original, whichever is smaller. The x position that has to be removed from the original is between x1 and x2. <br><br>
 Doing the same for the y positions, the original is now split up into 9 rectangles, some of which can have 0 area. By removing the original platform and adding the non-center, non-0 area platforms, the cut can be successfully made.<br><br>
