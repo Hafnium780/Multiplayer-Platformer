@@ -601,3 +601,21 @@ The solution to this is somewhat simple, just replace any special characters tha
 ```javascript
 msg = msg.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 ```
+## Storing data in files
+Right now, whenever the server is restarted, we lose all the hard work used to create the platforms. It would be better to save every platform. We create a file called data.json alongside the server.js file. We read the data in the file, and every 5 seconds we write the current contents of plat to the file.<br><br>
+**server.js**
+```javascript
+const fs = require('fs');
+
+fs.readFile('data.json', 'utf8', (err, data) => { // Read the data
+  try { plat = JSON.parse(data.trim()); } // Parse it into the plat array
+  catch (err) { plat = []; console.log(err); } // Error could occur if the file is empty
+});
+
+setInterval(() => {
+  if (plat.length == 0) return; // Don't write if no platforms, could overwrite them before being loaded (because it is not instant)
+  let json = JSON.stringify(plat); // Convert the object to a string
+  fs.writeFile('data.json', json, 'utf8', (err) => { if (err) console.log(err); }); // Write to file
+}, 5000); // Every 5 seconds
+```
+We also 
