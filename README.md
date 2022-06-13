@@ -618,4 +618,3 @@ setInterval(() => {
   fs.writeFile('data.json', json, 'utf8', (err) => { if (err) console.log(err); }); // Write to file
 }, 5000); // Every 5 seconds
 ```
-We also 
